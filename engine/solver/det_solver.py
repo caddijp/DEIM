@@ -12,6 +12,8 @@ import datetime
 
 import torch
 
+from torch import distributed as dist
+
 from ..misc import dist_utils, stats
 
 from ._solver import BaseSolver
@@ -69,6 +71,9 @@ class DetSolver(BaseSolver):
                 self.train_dataloader.sampler.set_epoch(epoch)
 
             if epoch == self.train_dataloader.collate_fn.stop_epoch:
+                # Wait for the checkpoint to be fully written by rank 0
+                if dist.is_available() and dist.is_initialized():
+                    dist.barrier()
                 self.load_resume_state(str(self.output_dir / 'best_stg1.pth'))
                 self.ema.decay = self.train_dataloader.collate_fn.ema_restart_decay
                 print(f'Refresh EMA at epoch {epoch} with decay {self.ema.decay}')
@@ -135,7 +140,9 @@ class DetSolver(BaseSolver):
                             dist_utils.save_on_master(self.state_dict(), self.output_dir / 'best_stg2.pth')
                         else:
                             dist_utils.save_on_master(self.state_dict(), self.output_dir / 'best_stg1.pth')
-
+                        # Wait for the checkpoint to be fully written by rank 0
+                        if dist.is_available() and dist.is_initialized():
+                            dist.barrier()
                 best_stat_print[k] = max(best_stat[k], top1)
                 print(f'best_stat: {best_stat_print}')  # global best
 
@@ -147,10 +154,16 @@ class DetSolver(BaseSolver):
                     else:
                         top1 = max(test_stats[k][0], top1)
                         dist_utils.save_on_master(self.state_dict(), self.output_dir / 'best_stg1.pth')
+                    # Wait for the checkpoint to be fully written by rank 0
+                    if dist.is_available() and dist.is_initialized():
+                        dist.barrier()
 
                 elif epoch >= self.train_dataloader.collate_fn.stop_epoch:
                     best_stat = {'epoch': -1, }
                     self.ema.decay -= 0.0001
+                    # Wait for the checkpoint to be fully written by rank 0
+                    if dist.is_available() and dist.is_initialized():
+                        dist.barrier()
                     self.load_resume_state(str(self.output_dir / 'best_stg1.pth'))
                     print(f'Refresh EMA at epoch {epoch} with decay {self.ema.decay}')
 
