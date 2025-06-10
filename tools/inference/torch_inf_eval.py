@@ -31,7 +31,7 @@ def draw(images, labels, boxes, scores, file_name, thrh):
             draw.rectangle(list(b), outline='red')
             draw.text((b[0], b[1]), text=f"{lab[j].item()} {round(scrs[j].item(), 2)}", fill='blue', )
 
-        im.save(f'bboxed_images/{file_name}')
+        im.save(f'../eval_results/bboxed_images/{file_name}')
 
 
 def inference(model, im_data, orig_size):
@@ -226,7 +226,6 @@ def main(args):
         print("No PNG images found in directory.")
     else:
         for img_path in image_files:
-            img_path = img_path.removeprefix("../")
             print(f"Processing {img_path} ...")
             outputs = process_image(model, device, str(img_path),iou_th, img_size)
             if outputs is None:
