@@ -14,6 +14,9 @@ from torchvision.ops import box_iou
 import sys
 import os
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+from timer import timed
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from engine.core import YAMLConfig
 
@@ -33,7 +36,7 @@ def draw(images, labels, boxes, scores, file_name, thrh):
 
         im.save(f'../eval_results/bboxed_images/{file_name}')
 
-
+@timed()
 def inference(model, im_data, orig_size):
     return model(im_data, orig_size)
 
@@ -49,11 +52,11 @@ def process_image(model, device, file_path, iou_thr, img_size):
     ])
     im_data = transforms(im_pil).unsqueeze(0).to(device)
 
-    output = inference(model, im_data, orig_size)
+    output, inference_time = inference(model, im_data, orig_size)
     labels, boxes, scores = output
 
     draw([im_pil], labels, boxes, scores, file_name, iou_thr)
-    return output
+    return output, inference_time
 
 
 def precision_recall(df, predicts, iou_th, class_idx=0):
@@ -213,6 +216,7 @@ def main(args):
 
     # Loop over eval data
     predicts = []
+    inference_times = []
     eval_csv = args.input
     iou_th = args.threshold
     output_csv = args.output
@@ -227,11 +231,12 @@ def main(args):
     else:
         for img_path in image_files:
             print(f"Processing {img_path} ...")
-            outputs = process_image(model, device, str(img_path),iou_th, img_size)
+            outputs, inference_time = process_image(model, device, str(img_path),iou_th, img_size)
             if outputs is None:
                 predicts.append([])
             else:
                 labels, boxes, scores = outputs
+                inference_times.append(inference_time)
                 # Move to CPU and detach to save memory
                 labels_cpu = labels.detach().cpu()
                 boxes_cpu = boxes.detach().cpu()
@@ -248,6 +253,14 @@ def main(args):
         all_eval_dfs.append(eval_df)
     predict_result = pd.concat(all_eval_dfs)
     predict_result.to_csv(output_csv, index=False)
+　  inference_times_df = pd.DataFrame(inference_times[1:], columns=['time']) # [1:] to avoid first run outlier
+    inference_times_df.to_csv('./inference_times.csv', index=False)
+    average = inference_times_df['time'].mean()
+    minimum = inference_times_df['time'].min()
+    maximum = inference_times_df['time'].max()
+    print(f"Inference time average: {average:.4f} s")
+    print(f"Inference time Min:     {minimum:.4f} s")
+    print(f"Inference time Max:     {maximum:.4f} s")    
 
 
 if __name__ == '__main__':
