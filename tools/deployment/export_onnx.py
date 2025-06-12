@@ -51,8 +51,8 @@ def main(args, ):
 
     model = Model()
 
-    data = torch.rand(32, 3, 640, 640)
-    size = torch.tensor([[640, 640]])
+    data = torch.rand(32, 3, args.size, args.size)
+    size = torch.tensor([[args.size, args.size]])
     _ = model(data, size)
 
     dynamic_axes = {
@@ -99,5 +99,6 @@ if __name__ == '__main__':
     parser.add_argument('--resume', '-r', type=str, )
     parser.add_argument('--check',  action='store_true', default=True,)
     parser.add_argument('--simplify',  action='store_true', default=True,)
+    parser.add_argument('--size',  type=int, default=2048, help='image size used in training',)
     args = parser.parse_args()
     main(args)
