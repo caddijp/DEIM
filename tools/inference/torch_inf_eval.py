@@ -4,6 +4,7 @@ Copyright (c) 2024 The D-FINE Authors. All Rights Reserved.
 
 import torch
 import torch.nn as nn
+from torch.cuda.amp import autocast
 import torchvision.transforms as T
 
 import numpy as np
@@ -40,19 +41,20 @@ def draw(images, labels, boxes, scores, file_name, thrh):
 def inference(model, im_data, orig_size):
     return model(im_data, orig_size)
 
-def process_image(model, device, file_path, iou_thr, img_size):
+def process_image(model, device, file_path, iou_thr, img_size, fp16_flag):
     file_name = os.path.basename(file_path)
     im_pil = Image.open(file_path).convert('RGB')
     w, h = im_pil.size
-    orig_size = torch.tensor([[w, h]]).to(device)
+    with torch.inference_mode():
+        orig_size = torch.tensor([[w, h]]).to(device)
 
-    transforms = T.Compose([
-        T.Resize((img_size, img_size)),
-        T.ToTensor(),
-    ])
-    im_data = transforms(im_pil).unsqueeze(0).to(device)
-
-    output, inference_time = inference(model, im_data, orig_size)
+        transforms = T.Compose([
+            T.Resize((img_size, img_size)),
+            T.ToTensor(),
+        ])
+        im_data = transforms(im_pil).unsqueeze(0).to(device)
+        with autocast(dtype=torch.float16 if fp16_flag else torch.float32):
+            output, inference_time = inference(model, im_data, orig_size)
     labels, boxes, scores = output
 
     draw([im_pil], labels, boxes, scores, file_name, iou_thr)
@@ -220,6 +222,7 @@ def main(args):
     eval_csv = args.input
     iou_th = args.threshold
     output_csv = args.output
+    fp16_flag = args.fp16
     img_size = args.size
     df = pd.read_csv(eval_csv)
     val_df = df.loc[df.cv == "val"].reset_index(drop=True)
@@ -231,7 +234,7 @@ def main(args):
     else:
         for img_path in image_files:
             print(f"Processing {img_path} ...")
-            outputs, inference_time = process_image(model, device, str(img_path),iou_th, img_size)
+            outputs, inference_time = process_image(model, device, str(img_path),iou_th, img_size, fp16_flag)
             if outputs is None:
                 predicts.append([])
             else:
@@ -253,7 +256,7 @@ def main(args):
         all_eval_dfs.append(eval_df)
     predict_result = pd.concat(all_eval_dfs)
     predict_result.to_csv(output_csv, index=False)
-　  inference_times_df = pd.DataFrame(inference_times[1:], columns=['time']) # [1:] to avoid first run outlier
+    inference_times_df = pd.DataFrame(inference_times[1:], columns=['time']) # [1:] to avoid first run outlier
     inference_times_df.to_csv('./inference_times.csv', index=False)
     average = inference_times_df['time'].mean()
     minimum = inference_times_df['time'].min()
@@ -272,6 +275,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, default='predict_validation_data.csv', help='Output filename for evaluation results csv')
     parser.add_argument('-t', '--threshold', type=float, default=0.3, help='bbox IOU threshold for evaluation')
     parser.add_argument('-s', '--size', type=int, default=2048, help='Image sizes: 2048 or 4096')
+    parser.add_argument('--fp16', action='store_true', default=False, help='fp16 precision or not',)
     parser.add_argument('-d', '--device', type=str, default='cpu')
     args = parser.parse_args()
     main(args)
