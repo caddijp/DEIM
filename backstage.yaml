@@ -1,0 +1,15 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: deim
+  description: "[CVPR 2025] DEIM: DETR with Improved Matching for Fast Convergence"
+  annotations:
+    github.com/project-slug: caddijp/DEIM
+    backstage.io/source-location: url:https://github.com/caddijp/DEIM
+  tags:
+    - touches-customer-data
+spec:
+  type: repository
+  lifecycle: production
+  owner: group:TODO-set-owner
